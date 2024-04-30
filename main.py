@@ -57,23 +57,41 @@ def deal_initial_cards(player, dealer, deck):
     dealer.add_card(deck.deal_card())
 
 def hit(player, deck):
-    player.add_card(deck.deal_card())
+    picked_card = deck.deal_card()
+    player.add_card(picked_card)
+    print(f"\n" + "="*20)
+    print(f"A {picked_card} was drawn from the deck.")
+    print("="*20)
+    time.sleep(1)
 
 def stand(player):
     pass
 
+def format_cards(cards):
+    if isinstance(cards, Card):
+        return str(cards)
+    else:
+        str_cards = ""
+        for card in cards:
+            str_cards += str(card) + ", " if card != cards[-1] else "and " + str(card)
+        return str_cards
+
 def play_game():
+    print("\n" + "#"*20)
     print("Welcome to Blackjack!")
+    print("#"*20 + "\n")
     deck = Deck()
     player_hand = Hand()
     dealer_hand = Hand()
+
+    time.sleep(1)
 
     deal_initial_cards(player_hand, dealer_hand, deck)
 
     while True:
         print("\n" + "="*20)
-        print("Player's hand:", [str(card) for card in player_hand.cards], "Current value:", player_hand.value)
-        print("Dealer's up card:", str(dealer_hand.cards[0]))
+        print("Player's hand:", format_cards(player_hand.cards), "# Current value:", player_hand.value)
+        print("Dealer's up card:", format_cards(dealer_hand.cards[0]))
         print("="*20 + "\n")
 
         if player_hand.value == 21:
@@ -85,11 +103,23 @@ def play_game():
             if action == 'hit':
                 hit(player_hand, deck)
             elif action == 'stand':
+                print("="*20)
+                print("Player stands.")
+                print("="*20)
+                print("\n" + "="*20)
+                print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
+                print("="*20 + "\n")
+                time.sleep(2)
                 while dealer_hand.value < 17:
                     hit(dealer_hand, deck)
+                    print("\n" + "="*20)
+                    print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
+                    print("="*20 + "\n")
                 break
             else:
+                print("="*20)
                 print("Invalid action. Please enter 'hit' or 'stand'.")
+                print("="*20)
 
     dealer_value = dealer_hand.value
     dealer_value = 0 if dealer_value > 21 else dealer_value
