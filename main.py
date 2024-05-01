@@ -121,22 +121,18 @@ def play_game():
                 print("Invalid action. Please enter 'hit' or 'stand'.")
                 print("="*20)
 
-    dealer_value = dealer_hand.value
-    dealer_value = 0 if dealer_value > 21 else dealer_value
-
-    if player_hand.value > dealer_value:
-        return "Player wins!"
-    elif player_hand.value < dealer_value:
-        return "Dealer wins!"
-    else:
-        return "It's a push!"
+    result = play_again = input("Do you want to play again? (yes/no) ").lower()
+    if play_again != 'yes':
+        save_game_state(player_hand, dealer_hand, deck, "game_over")
+    return result
 
 def save_game_state(player_hand, dealer_hand, deck, game_state):
     conn = sqlite3.connect('blackjack.db')
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
+    cards = [str(card) for card in player_hand.cards]
     c.execute("INSERT INTO game_state VALUES (?, ?, ?, ?)", 
-               (json.dumps([str(card) for card in player_hand.cards]), 
+               (json.dumps(cards), 
                 json.dumps([str(card) for card in dealer_hand.cards]), 
                 json.dumps([str(card) for card in deck.cards]), 
                 json.dumps(game_state)))
@@ -149,9 +145,12 @@ def load_game_state():
     c.execute('SELECT * FROM game_state')
     row = c.fetchone()
     if row:
-        player_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in json.loads(row[0])]
-        dealer_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in json.loads(row[1])]
-        deck = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in json.loads(row[2])]
+        cards = json.loads(row[0])
+        player_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
+        cards = json.loads(row[1])
+        dealer_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
+        cards = json.loads(row[2])
+        deck = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
         game_state = json.loads(row[3])
         return player_hand, dealer_hand, deck, game_state
     else:
