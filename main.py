@@ -3,6 +3,10 @@ import os
 import time
 import json
 import sqlite3
+from rich.console import Console
+from rich.prompt import Prompt
+
+console = Console()
 
 class Card:
     def __init__(self, suit, rank):
@@ -59,9 +63,9 @@ def deal_initial_cards(player, dealer, deck):
 def hit(player, deck):
     picked_card = deck.deal_card()
     player.add_card(picked_card)
-    print(f"\n" + "="*20)
-    print(f"A {picked_card} was drawn from the deck.")
-    print("="*20)
+    console.print(f"\n" + "="*20)
+    console.print(f"A {picked_card} was drawn from the deck.")
+    console.print("="*20)
     time.sleep(1)
 
 def stand(player):
@@ -77,9 +81,9 @@ def format_cards(cards):
         return str_cards
 
 def play_game():
-    print("\n" + "#"*20)
-    print("Welcome to Blackjack!")
-    print("#"*20 + "\n")
+    console.print("\n" + "#"*20)
+    console.print("Welcome to Blackjack!")
+    console.print("#"*20 + "\n")
     deck = Deck()
     player_hand = Hand()
     dealer_hand = Hand()
@@ -89,40 +93,52 @@ def play_game():
     deal_initial_cards(player_hand, dealer_hand, deck)
 
     while True:
-        print("\n" + "="*20)
-        print("Player's hand:", format_cards(player_hand.cards), "# Current value:", player_hand.value)
-        print("Dealer's up card:", format_cards(dealer_hand.cards[0]))
-        print("="*20 + "\n")
+        console.print("\n" + "="*20)
+        console.print("Player's hand:", format_cards(player_hand.cards), "# Current value:", player_hand.value)
+        console.print("Dealer's up card:", format_cards(dealer_hand.cards[0]))
+        console.print("="*20 + "\n")
 
         if player_hand.value == 21:
             return "Player wins with a Blackjack!"
         elif player_hand.value > 21:
             return "Player busts! Dealer wins."
         else:
-            action = input("Do you want to hit or stand? ").lower()
+            action = Prompt.ask("Do you want to hit or stand? ").lower()
             if action == 'hit':
                 hit(player_hand, deck)
             elif action == 'stand':
-                print("="*20)
-                print("Player stands.")
-                print("="*20)
-                print("\n" + "="*20)
-                print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
-                print("="*20 + "\n")
+                console.print("="*20)
+                console.print("Player stands.")
+                console.print("="*20)
+                console.print("\n" + "="*20)
+                console.print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
+                console.print("="*20 + "\n")
                 time.sleep(2)
                 while dealer_hand.value < 17:
                     hit(dealer_hand, deck)
-                    print("\n" + "="*20)
-                    print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
-                    print("="*20 + "\n")
+                    console.print("\n" + "="*20)
+                    console.print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
+                    console.print("="*20 + "\n")
+                if dealer_hand.value > 21:
+                    console.print("="*20)
+                    console.print("Dealer busts! Player wins.")
+                    console.print("="*20)
+                elif dealer_hand.value > player_hand.value:
+                    console.print("="*20)
+                    console.print("Dealer wins.")
+                    console.print("="*20)
+                elif dealer_hand.value < player_hand.value:
+                    console.print("="*20)
+                    console.print("Player wins.")
+                    console.print("="*20)
                 break
             else:
-                print("="*20)
-                print("Invalid action. Please enter 'hit' or 'stand'.")
-                print("="*20)
+                console.print("="*20)
+                console.print("Invalid action. Please enter 'hit' or 'stand'.")
+                console.print("="*20)
 
-    result = play_again = input("Do you want to play again? (yes/no) ").lower()
-    if play_again != 'yes':
+    result = Prompt.ask("Do you want to play again? (yes/no) ").lower()
+    if result != 'yes':
         save_game_state(player_hand, dealer_hand, deck, "game_over")
     return result
 
@@ -130,9 +146,8 @@ def save_game_state(player_hand, dealer_hand, deck, game_state):
     conn = sqlite3.connect('blackjack.db')
     c = conn.cursor()
     c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
-    cards = [str(card) for card in player_hand.cards]
     c.execute("INSERT INTO game_state VALUES (?, ?, ?, ?)", 
-               (json.dumps(cards), 
+               (json.dumps([str(card) for card in player_hand.cards]), 
                 json.dumps([str(card) for card in dealer_hand.cards]), 
                 json.dumps([str(card) for card in deck.cards]), 
                 json.dumps(game_state)))
@@ -145,12 +160,15 @@ def load_game_state():
     c.execute('SELECT * FROM game_state')
     row = c.fetchone()
     if row:
-        cards = json.loads(row[0])
-        player_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
-        cards = json.loads(row[1])
-        dealer_hand = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
-        cards = json.loads(row[2])
-        deck = [Card(card.split(' of ')[1], card.split(' of ')[0]) for card in cards]
+        player_hand = Hand()
+        dealer_hand = Hand()
+        deck = Deck()
+        for card in json.loads(row[0]):
+            player_hand.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
+        for card in json.loads(row[1]):
+            dealer_hand.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
+        for card in json.loads(row[2]):
+            deck.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
         game_state = json.loads(row[3])
         return player_hand, dealer_hand, deck, game_state
     else:
@@ -181,11 +199,11 @@ while True:
             game_state = "playing"
 
         result = play_game()
-        print("\n" + "="*20)
-        print(result)
-        print("="*20 + "\n")
+        console.print("\n" + "="*20)
+        console.print(result)
+        console.print("="*20 + "\n")
         save_game_state(player_hand, dealer_hand, deck, "game_over")
-        play_again = input("Do you want to play again? (yes/no) ").lower()
+        play_again = Prompt.ask("Do you want to play again? (yes/no) ").lower()
         if play_again != 'yes':
             break
     except KeyboardInterrupt:
