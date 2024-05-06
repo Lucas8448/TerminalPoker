@@ -84,6 +84,21 @@ def play_game():
     console.print("\n" + "#"*20)
     console.print("Welcome to Blackjack!")
     console.print("#"*20 + "\n")
+    # option to load data from json file into database
+    load_data = Prompt.ask("Do you want to load a saved game? (yes/no) ").lower()
+    if load_data == "yes":
+        with open('blackjack.json', 'r') as f:
+            with sqlite3.connect('blackjack.db') as conn:
+                c = conn.cursor()
+                c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
+                for line in f:
+                    row = json.loads(line)
+                    c.execute("INSERT INTO game_state VALUES (?, ?, ?, ?)", (row[0], row[1], row[2], row[3]))
+                conn.commit()
+        player_hand, dealer_hand, deck, game_state = load_game_state()
+    else:
+        pass
+
     deck = Deck()
     player_hand = Hand()
     dealer_hand = Hand()
@@ -137,10 +152,16 @@ def play_game():
                 console.print("Invalid action. Please enter 'hit' or 'stand'.")
                 console.print("="*20)
 
-    result = Prompt.ask("Do you want to play again? (yes/no) ").lower()
-    if result != 'yes':
-        save_game_state(player_hand, dealer_hand, deck, "game_over")
-    return result
+    result = Prompt.ask("Do you want to play again? (yes/no) or export games (export) ").lower()
+    if result == "export":
+        with open('blackjack.json', 'w') as f:
+            with sqlite3.connect('blackjack.db') as conn:
+                for row in conn.execute('SELECT * FROM game_state'):
+                    f.write(json.dumps(row) + "\n")
+    if result == "yes":
+        return play_game()
+    else:
+        return "Goodbye!"
 
 def save_game_state(player_hand, dealer_hand, deck, game_state):
     conn = sqlite3.connect('blackjack.db')
