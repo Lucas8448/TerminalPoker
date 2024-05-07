@@ -43,12 +43,4 @@ Follow the on-screen prompts to play the game. You can choose to hit or stand du
   - `Deck`: Handles card shuffling and dealing.
   - `Hand`: Manages the cards for the player and dealer.
   - `BlackjackGame`: Controls game logic, interactions, and maintains the game state.
-- **External Libraries:** Utilizes `rich` for enhanced console output and `sqlite3` for database operations.
-
-## Contributing
-
-Feel free to fork the repository, make improvements, and submit pull requests. We appreciate your contributions to enhancing this game!
-
----
-
-You can save this README as `README.md` in the root directory of your project. Make sure to adjust the repository URL and any specific details about your project setup or additional features you might have added.
+- **External Libraries:** Utilizes `rich` for enhanced console output and `sqlite3` for database operations
