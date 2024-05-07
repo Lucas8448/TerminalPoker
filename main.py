@@ -191,7 +191,7 @@ class BlackjackGame:
             return "Dealer wins."
         elif self.dealer_hand.value < self.player_hand.value:
             return "Player wins."
-        return "It's a tie!"
+        return "It's a push!"
 
     @staticmethod
     def format_cards(cards):
