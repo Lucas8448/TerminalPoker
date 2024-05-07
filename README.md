@@ -43,4 +43,4 @@ Follow the on-screen prompts to play the game. You can choose to hit or stand du
   - `Deck`: Handles card shuffling and dealing.
   - `Hand`: Manages the cards for the player and dealer.
   - `BlackjackGame`: Controls game logic, interactions, and maintains the game state.
-- **External Libraries:** Utilizes `rich` for enhanced console output and `sqlite3` for database operations
+- **External Libraries:** Utilizes `rich` for enhanced console output
