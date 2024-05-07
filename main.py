@@ -1,8 +1,7 @@
-import random
-import os
-import time
-import json
 import sqlite3
+import json
+import random
+import time
 from rich.console import Console
 from rich.prompt import Prompt
 
@@ -12,7 +11,7 @@ class Card:
     def __init__(self, suit, rank):
         self.suit = suit
         self.rank = rank
-        self.value = self.get_card_value(rank)
+        self.value = Card.get_card_value(rank)
 
     def __str__(self):
         return f"{self.rank} of {self.suit}"
@@ -22,19 +21,28 @@ class Card:
         values = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'Jack': 10, 'Queen': 10, 'King': 10, 'Ace': 11}
         return values[rank]
 
+    def to_json(self):
+        return {"suit": self.suit, "rank": self.rank}
+
 class Deck:
     def __init__(self):
-        self.cards = [Card(suit, rank) for suit in ["Hearts", "Diamonds", "Spades", "Clubs"] for rank in ["2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"]]
-        random.shuffle(self.cards)
+        self.cards = []
+        self.load_deck()
+        self.shuffle()
 
-    def deal_card(self):
-        return self.cards.pop()
-
-    def add_card(self, card):
-        self.cards.append(card)
+    def load_deck(self):
+        with open("deck.json", "r") as f:
+            deck_data = json.load(f)
+        self.cards = [Card(card["suit"], card["rank"]) for card in deck_data]
 
     def shuffle(self):
         random.shuffle(self.cards)
+        console.print("\nShuffling the deck...\n")
+        time.sleep(1.5)  # Pause for effect
+
+    def deal_card(self):
+        card = self.cards.pop(0) if self.cards else None
+        return card
 
 class Hand:
     def __init__(self):
@@ -42,193 +50,167 @@ class Hand:
         self.value = 0
         self.aces = 0
 
-    def add_card(self, card):
-        self.cards.append(card)
-        self.value += card.value
-        if card.rank == 'Ace':
-            self.aces += 1
-        self.adjust_for_ace()
+    def add_card(self, card, is_dealer=False):
+        if card:
+            self.cards.append(card)
+            self.value += card.value
+            display_card = f"hidden card" if is_dealer and len(self.cards) == 1 else card
+            actor = "Dealer" if is_dealer else "Player"
+            console.print(f"{actor} dealt: {display_card}")
+            time.sleep(1)
+            if card.rank == 'Ace':
+                self.aces += 1
+            self.adjust_for_ace()
 
     def adjust_for_ace(self):
         while self.value > 21 and self.aces:
+            console.print("Adjusting for Ace...")
             self.value -= 10
             self.aces -= 1
+            time.sleep(1)
 
-def deal_initial_cards(player, dealer, deck):
-    player.add_card(deck.deal_card())
-    dealer.add_card(deck.deal_card())
-    player.add_card(deck.deal_card())
-    dealer.add_card(deck.deal_card())
+    def clear(self):
+        self.cards = []
+        self.value = 0
+        self.aces = 0
 
-def hit(player, deck):
-    picked_card = deck.deal_card()
-    player.add_card(picked_card)
-    console.print(f"\n" + "="*20)
-    console.print(f"A {picked_card} was drawn from the deck.")
-    console.print("="*20)
-    time.sleep(1)
+    def to_json(self):
+        return [card.to_json() for card in self.cards]
 
-def stand(player):
-    pass
-
-def format_cards(cards):
-    if isinstance(cards, Card):
-        return str(cards)
-    else:
-        str_cards = ""
+    def from_json(self, cards):
+        self.clear()
         for card in cards:
-            str_cards += str(card) + ", " if card != cards[-1] else "and " + str(card)
-        return str_cards
+            self.add_card(Card(card["suit"], card["rank"]))
 
-def play_game():
-    console.print("\n" + "#"*20)
-    console.print("Welcome to Blackjack!")
-    console.print("#"*20 + "\n")
-    # option to load data from json file into database
-    load_data = Prompt.ask("Do you want to load a saved game? (yes/no) ").lower()
-    if load_data == "yes":
-        with open('blackjack.json', 'r') as f:
-            with sqlite3.connect('blackjack.db') as conn:
-                c = conn.cursor()
-                c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
-                for line in f:
-                    row = json.loads(line)
-                    c.execute("INSERT INTO game_state VALUES (?, ?, ?, ?)", (row[0], row[1], row[2], row[3]))
-                conn.commit()
-        player_hand, dealer_hand, deck, game_state = load_game_state()
-    else:
-        pass
+class BlackjackGame:
+    def __init__(self, db_path="game.db"):
+        self.db_path = db_path
+        self.initialize_db()
+        self.deck = Deck()
+        self.player_hand = Hand()
+        self.dealer_hand = Hand()
+        self.load_game_state()
 
-    deck = Deck()
-    player_hand = Hand()
-    dealer_hand = Hand()
+    def initialize_db(self):
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS game_states (
+            id INTEGER PRIMARY KEY,
+            player_hand TEXT,
+            dealer_hand TEXT,
+            deck TEXT
+        )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS game_results (
+            id INTEGER PRIMARY KEY,
+            result TEXT
+        )''')
+        conn.commit()
+        conn.close()
 
-    time.sleep(1)
+    def save_game_state(self):
+        state = {
+            "player_hand": self.player_hand.to_json(),
+            "dealer_hand": self.dealer_hand.to_json(),
+            "deck": [card.to_json() for card in self.deck.cards]
+        }
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM game_states")
+        cur.execute("INSERT INTO game_states (player_hand, dealer_hand, deck) VALUES (?, ?, ?)", 
+                    (json.dumps(state["player_hand"]), json.dumps(state["dealer_hand"]), json.dumps(state["deck"])))
+        conn.commit()
+        conn.close()
 
-    deal_initial_cards(player_hand, dealer_hand, deck)
-
-    while True:
-        console.print("\n" + "="*20)
-        console.print("Player's hand:", format_cards(player_hand.cards), "# Current value:", player_hand.value)
-        console.print("Dealer's up card:", format_cards(dealer_hand.cards[0]))
-        console.print("="*20 + "\n")
-
-        if player_hand.value == 21:
-            return "Player wins with a Blackjack!"
-        elif player_hand.value > 21:
-            return "Player busts! Dealer wins."
+    def load_game_state(self):
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT player_hand, dealer_hand, deck FROM game_states LIMIT 1")
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            self.player_hand.from_json(json.loads(row[0]))
+            self.dealer_hand.from_json(json.loads(row[1]))
+            self.deck.cards = [Card(card["suit"], card["rank"]) for card in json.loads(row[2])]
         else:
-            action = Prompt.ask("Do you want to hit or stand? ").lower()
+            self.deck.load_deck()
+            self.deck.shuffle()
+
+    def log_game_result(self, result):
+        conn = sqlite3.connect(self.db_path)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO game_results (result) VALUES (?)", (result,))
+        conn.commit()
+        conn.close()
+
+    def play_round(self):
+        self.deck.load_deck()
+        self.deck.shuffle()
+        self.deal_initial_cards()
+
+        while True:
+            console.print(f"\n{'='*20}\nPlayer's hand: {self.format_cards(self.player_hand.cards)} # Current value: {self.player_hand.value}")
+            console.print(f"Dealer's up card: {self.dealer_hand.cards[1] if len(self.dealer_hand.cards) > 1 else 'hidden card'}\n{'='*20}\n")
+            time.sleep(2)
+            if self.player_hand.value == 21:
+                console.print("Blackjack! Congratulations!")
+                time.sleep(1)
+                return "Player wins with a Blackjack!"
+            elif self.player_hand.value > 21:
+                console.print("Bust! Sorry, you went over 21.")
+                time.sleep(1)
+                return "Player busts! Dealer wins."
+            action = Prompt.ask("Do you want to hit or stand?").lower()
             if action == 'hit':
-                hit(player_hand, deck)
+                self.player_hand.add_card(self.deck.deal_card())
             elif action == 'stand':
-                console.print("="*20)
-                console.print("Player stands.")
-                console.print("="*20)
-                console.print("\n" + "="*20)
-                console.print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
-                console.print("="*20 + "\n")
-                time.sleep(2)
-                while dealer_hand.value < 17:
-                    hit(dealer_hand, deck)
-                    console.print("\n" + "="*20)
-                    console.print("Dealer's hand:", format_cards(dealer_hand.cards), "# Current value:", dealer_hand.value)
-                    console.print("="*20 + "\n")
-                if dealer_hand.value > 21:
-                    console.print("="*20)
-                    console.print("Dealer busts! Player wins.")
-                    console.print("="*20)
-                elif dealer_hand.value > player_hand.value:
-                    console.print("="*20)
-                    console.print("Dealer wins.")
-                    console.print("="*20)
-                elif dealer_hand.value < player_hand.value:
-                    console.print("="*20)
-                    console.print("Player wins.")
-                    console.print("="*20)
+                console.print(f"\n{'='*20}\nPlayer stands.\n{'='*20}")
+                time.sleep(1)
                 break
-            else:
-                console.print("="*20)
-                console.print("Invalid action. Please enter 'hit' or 'stand'.")
-                console.print("="*20)
+        
+        return self.evaluate_winner()
 
-    result = Prompt.ask("Do you want to play again? (yes/no) or export games (export) ").lower()
-    if result == "export":
-        with open('blackjack.json', 'w') as f:
-            with sqlite3.connect('blackjack.db') as conn:
-                for row in conn.execute('SELECT * FROM game_state'):
-                    f.write(json.dumps(row) + "\n")
-    if result == "yes":
-        return play_game()
-    else:
-        return "Goodbye!"
+    def deal_initial_cards(self):
+        self.player_hand.add_card(self.deck.deal_card())
+        self.dealer_hand.add_card(self.deck.deal_card(), is_dealer=True)
+        self.player_hand.add_card(self.deck.deal_card())
+        self.dealer_hand.add_card(self.deck.deal_card(), is_dealer=True)
 
-def save_game_state(player_hand, dealer_hand, deck, game_state):
-    conn = sqlite3.connect('blackjack.db')
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
-    c.execute("INSERT INTO game_state VALUES (?, ?, ?, ?)", 
-               (json.dumps([str(card) for card in player_hand.cards]), 
-                json.dumps([str(card) for card in dealer_hand.cards]), 
-                json.dumps([str(card) for card in deck.cards]), 
-                json.dumps(game_state)))
-    conn.commit()
-    conn.close()
+    def evaluate_winner(self):
+        console.print("\nDealer's turn to draw cards...\n")
+        console.print(f"Dealer reveals the hidden card: {self.dealer_hand.cards[0]}")
+        time.sleep(2)
+        while self.dealer_hand.value < 17:
+            self.dealer_hand.add_card(self.deck.deal_card(), is_dealer=True)
+            time.sleep(1)
+        console.print(f"\n{'='*20}\nDealer's hand: {self.format_cards(self.dealer_hand.cards)} # Current value: {self.dealer_hand.value}\n{'='*20}\n")
+        if self.dealer_hand.value > 21:
+            console.print("Dealer busts!")
+            time.sleep(1)
+            return "Dealer busts! Player wins."
+        elif self.dealer_hand.value > self.player_hand.value:
+            return "Dealer wins."
+        elif self.dealer_hand.value < self.player_hand.value:
+            return "Player wins."
+        return "It's a tie!"
 
-def load_game_state():
-    conn = sqlite3.connect('blackjack.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM game_state')
-    row = c.fetchone()
-    if row:
-        player_hand = Hand()
-        dealer_hand = Hand()
-        deck = Deck()
-        for card in json.loads(row[0]):
-            player_hand.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
-        for card in json.loads(row[1]):
-            dealer_hand.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
-        for card in json.loads(row[2]):
-            deck.add_card(Card(card.split(' of ')[1], card.split(' of ')[0]))
-        game_state = json.loads(row[3])
-        return player_hand, dealer_hand, deck, game_state
-    else:
-        return None
+    @staticmethod
+    def format_cards(cards):
+        return ', '.join(str(card) for card in cards[:-1]) + ' and ' + str(cards[-1]) if len(cards) > 1 else str(cards[0])
 
-def delete_database():
-    os.remove('blackjack.db')
-
-def create_database():
-    conn = sqlite3.connect('blackjack.db')
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS game_state (player_hand TEXT, dealer_hand TEXT, deck TEXT, game_state TEXT)')
-    conn.commit()
-    conn.close()
-
-create_database()
-
-while True:
-    try:
-        load_result = load_game_state()
-        if load_result:
-            player_hand, dealer_hand, deck, game_state = load_result
-        else:
-            deck = Deck()
-            player_hand = Hand()
-            dealer_hand = Hand()
-            deal_initial_cards(player_hand, dealer_hand, deck)
-            game_state = "playing"
-
-        result = play_game()
-        console.print("\n" + "="*20)
-        console.print(result)
-        console.print("="*20 + "\n")
-        save_game_state(player_hand, dealer_hand, deck, "game_over")
-        play_again = Prompt.ask("Do you want to play again? (yes/no) ").lower()
-        if play_again != 'yes':
+def main():
+    game = BlackjackGame()
+    while True:
+        result = game.play_round()
+        game.log_game_result(result)
+        console.print(f"\n{'='*20}\n{result}\n{'='*20}\n")
+        game.player_hand.clear()
+        game.dealer_hand.clear()
+        if Prompt.ask("Do you want to play another game? (yes/no)").lower() != 'yes':
             break
-    except KeyboardInterrupt:
-        delete_database()
-        break
+        else:
+            console.print("\nStarting a new game...\n")
+            time.sleep(1)
+            main()
 
-delete_database()
+if __name__ == "__main__":
+    main()
