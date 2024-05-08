@@ -89,58 +89,42 @@ class BlackjackGame:
         self.deck = Deck()
         self.player_hand = Hand()
         self.dealer_hand = Hand()
-        self.load_game_state()
 
     def initialize_db(self):
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS game_states (
+        cur.execute('''CREATE TABLE IF NOT EXISTS game_results (
             id INTEGER PRIMARY KEY,
             player_hand TEXT,
             dealer_hand TEXT,
-            deck TEXT
-        )''')
-        cur.execute('''CREATE TABLE IF NOT EXISTS game_results (
-            id INTEGER PRIMARY KEY,
             result TEXT
         )''')
         conn.commit()
         conn.close()
 
-    def save_game_state(self):
-        state = {
-            "player_hand": self.player_hand.to_json(),
-            "dealer_hand": self.dealer_hand.to_json(),
-            "deck": [card.to_json() for card in self.deck.cards]
-        }
+    def log_game_result(self, player_hand, dealer_hand, result):
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
-        cur.execute("DELETE FROM game_states")
-        cur.execute("INSERT INTO game_states (player_hand, dealer_hand, deck) VALUES (?, ?, ?)", 
-                    (json.dumps(state["player_hand"]), json.dumps(state["dealer_hand"]), json.dumps(state["deck"])))
+        cur.execute("INSERT INTO game_results (player_hand, dealer_hand, result) VALUES (?, ?, ?)", 
+                    (json.dumps(player_hand), json.dumps(dealer_hand), result))
         conn.commit()
         conn.close()
-
-    def load_game_state(self):
+    
+    def view_previous_games(self):
         conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
-        cur.execute("SELECT player_hand, dealer_hand, deck FROM game_states LIMIT 1")
-        row = cur.fetchone()
+        cur.execute("SELECT * FROM game_results")
+        rows = cur.fetchall()
         conn.close()
-        if row:
-            self.player_hand.from_json(json.loads(row[0]))
-            self.dealer_hand.from_json(json.loads(row[1]))
-            self.deck.cards = [Card(card["suit"], card["rank"]) for card in json.loads(row[2])]
+        if rows:
+            console.print("\nPrevious Games:\n")
+            for row in rows:
+                console.print(f"Game ID: {row[0]}")
+                console.print(f"Player Hand: {', '.join([f'{card['rank']} of {card['suit']}' for card in json.loads(row[1])])}")
+                console.print(f"Dealer Hand: {', '.join([f'{card['rank']} of {card['suit']}' for card in json.loads(row[2])])}")
+                console.print(f"Result: {row[3]}\n")
         else:
-            self.deck.load_deck()
-            self.deck.shuffle()
-
-    def log_game_result(self, result):
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
-        cur.execute("INSERT INTO game_results (result) VALUES (?)", (result,))
-        conn.commit()
-        conn.close()
+            console.print("No previous games found.")
 
     def play_round(self):
         self.deck.load_deck()
@@ -167,7 +151,9 @@ class BlackjackGame:
                 time.sleep(1)
                 break
         
-        return self.evaluate_winner()
+        result = self.evaluate_winner()
+        self.log_game_result(self.player_hand.to_json(), self.dealer_hand.to_json(), result)
+        return result
 
     def deal_initial_cards(self):
         self.player_hand.add_card(self.deck.deal_card())
@@ -201,7 +187,6 @@ def main():
     game = BlackjackGame()
     while True:
         result = game.play_round()
-        game.log_game_result(result)
         console.print(f"\n{'='*20}\n{result}\n{'='*20}\n")
         game.player_hand.clear()
         game.dealer_hand.clear()
@@ -210,7 +195,21 @@ def main():
         else:
             console.print("\nStarting a new game...\n")
             time.sleep(1)
-            main()
+
+def main():
+    game = BlackjackGame()
+    while True:
+        result = game.play_round()
+        console.print(f"\n{'='*20}\n{result}\n{'='*20}\n")
+        game.player_hand.clear()
+        game.dealer_hand.clear()
+        if Prompt.ask("Do you want to play another game? (yes/no)").lower() != 'yes':
+            if Prompt.ask("Do you want to view previous games? (yes/no)").lower() == 'yes':
+                game.view_previous_games()
+                break
+        else:
+            console.print("\nStarting a new game...\n")
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
